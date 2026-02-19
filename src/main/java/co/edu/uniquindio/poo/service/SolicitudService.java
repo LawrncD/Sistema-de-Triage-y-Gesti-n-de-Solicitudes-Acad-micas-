@@ -1,0 +1,348 @@
+package co.edu.uniquindio.poo.service;
+
+import co.edu.uniquindio.poo.dto.request.*;
+import co.edu.uniquindio.poo.dto.response.SolicitudResponseDTO;
+import co.edu.uniquindio.poo.exception.*;
+import co.edu.uniquindio.poo.mapper.EntityMapper;
+import co.edu.uniquindio.poo.model.entity.HistorialSolicitud;
+import co.edu.uniquindio.poo.model.entity.Solicitud;
+import co.edu.uniquindio.poo.model.entity.Usuario;
+import co.edu.uniquindio.poo.model.enums.*;
+import co.edu.uniquindio.poo.repository.SolicitudRepository;
+import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.time.LocalDateTime;
+import java.util.List;
+
+/**
+ * Servicio principal para la gestión del ciclo de vida completo de las solicitudes académicas.
+ * 
+ * Implementa los siguientes requisitos funcionales:
+ * RF-01: Registro de solicitudes académicas
+ * RF-02: Clasificación de solicitudes
+ * RF-03: Priorización de solicitudes
+ * RF-04: Gestión del ciclo de vida (transiciones de estado)
+ * RF-05: Asignación de responsables
+ * RF-06: Registro del historial auditable
+ * RF-07: Consulta de solicitudes con filtros
+ * RF-08: Cierre de solicitudes
+ */
+@Service
+@RequiredArgsConstructor
+@Transactional
+public class SolicitudService {
+
+    private final SolicitudRepository solicitudRepository;
+    private final UsuarioService usuarioService;
+    private final PriorizacionService priorizacionService;
+    private final EntityMapper mapper;
+
+    // ==================== RF-01: REGISTRO DE SOLICITUDES ====================
+
+    /**
+     * Registra una nueva solicitud académica en el sistema.
+     * RF-01: Almacena descripción, canal de origen, fecha/hora y solicitante.
+     * El estado inicial es REGISTRADA y se genera la primera entrada en el historial.
+     */
+    public SolicitudResponseDTO registrarSolicitud(SolicitudRequestDTO request) {
+        // Verificar que el solicitante existe
+        Usuario solicitante = usuarioService.buscarUsuarioPorId(request.getSolicitanteId());
+
+        // Crear la solicitud con estado inicial REGISTRADA
+        Solicitud solicitud = Solicitud.builder()
+                .descripcion(request.getDescripcion())
+                .canalOrigen(request.getCanalOrigen())
+                .fechaRegistro(LocalDateTime.now())
+                .solicitante(solicitante)
+                .estado(EstadoSolicitud.REGISTRADA)
+                .fechaLimite(request.getFechaLimite())
+                .build();
+
+        // RF-06: Registrar acción en el historial
+        HistorialSolicitud historial = crearEntradaHistorial(
+                solicitud, solicitante,
+                "Solicitud registrada",
+                "Solicitud creada a través del canal: " + request.getCanalOrigen().getDescripcion()
+        );
+        solicitud.agregarHistorial(historial);
+
+        solicitud = solicitudRepository.save(solicitud);
+        return mapper.toSolicitudDTO(solicitud);
+    }
+
+    // ==================== RF-02: CLASIFICACIÓN DE SOLICITUDES ====================
+
+    /**
+     * Clasifica una solicitud según su tipo y cambia su estado a CLASIFICADA.
+     * RF-02: Clasificación según tipo (Registro, Homologación, Cancelación, etc.)
+     * RF-04: Transición REGISTRADA → CLASIFICADA
+     */
+    public SolicitudResponseDTO clasificarSolicitud(Long solicitudId, ClasificacionRequestDTO request) {
+        Solicitud solicitud = buscarSolicitudPorId(solicitudId);
+        Usuario usuario = usuarioService.buscarUsuarioPorId(request.getUsuarioId());
+
+        // RF-08: Verificar que no esté cerrada
+        validarNoEstaCerrada(solicitud);
+
+        // RF-04: Validar transición de estado
+        validarTransicion(solicitud, EstadoSolicitud.CLASIFICADA);
+
+        // Aplicar clasificación
+        solicitud.setTipoSolicitud(request.getTipoSolicitud());
+        solicitud.setEstado(EstadoSolicitud.CLASIFICADA);
+
+        // RF-03: Calcular prioridad automáticamente basada en reglas
+        Object[] resultado = priorizacionService.calcularPrioridad(solicitud);
+        solicitud.setPrioridad((Prioridad) resultado[0]);
+        solicitud.setJustificacionPrioridad((String) resultado[1]);
+
+        // RF-06: Registrar en historial
+        HistorialSolicitud historial = crearEntradaHistorial(
+                solicitud, usuario,
+                "Solicitud clasificada como: " + request.getTipoSolicitud().getDescripcion(),
+                request.getObservaciones() != null ? request.getObservaciones()
+                        : "Prioridad asignada: " + solicitud.getPrioridad().getDescripcion()
+        );
+        solicitud.agregarHistorial(historial);
+
+        solicitud = solicitudRepository.save(solicitud);
+        return mapper.toSolicitudDTO(solicitud);
+    }
+
+    // ==================== RF-03: PRIORIZACIÓN MANUAL ====================
+
+    /**
+     * Permite ajustar manualmente la prioridad de una solicitud con justificación.
+     * RF-03: Priorización con justificación obligatoria.
+     * RF-10: La sugerencia de la IA puede ser ajustada por un humano.
+     */
+    public SolicitudResponseDTO priorizarSolicitud(Long solicitudId, PriorizacionRequestDTO request) {
+        Solicitud solicitud = buscarSolicitudPorId(solicitudId);
+        Usuario usuario = usuarioService.buscarUsuarioPorId(request.getUsuarioId());
+
+        validarNoEstaCerrada(solicitud);
+
+        Prioridad prioridadAnterior = solicitud.getPrioridad();
+        solicitud.setPrioridad(request.getPrioridad());
+        solicitud.setJustificacionPrioridad(request.getJustificacion());
+
+        // RF-06: Registrar en historial
+        String accion = prioridadAnterior != null
+                ? "Prioridad cambiada de " + prioridadAnterior.getDescripcion() + " a " + request.getPrioridad().getDescripcion()
+                : "Prioridad asignada: " + request.getPrioridad().getDescripcion();
+
+        HistorialSolicitud historial = crearEntradaHistorial(
+                solicitud, usuario, accion, request.getJustificacion()
+        );
+        solicitud.agregarHistorial(historial);
+
+        solicitud = solicitudRepository.save(solicitud);
+        return mapper.toSolicitudDTO(solicitud);
+    }
+
+    // ==================== RF-04: CAMBIO DE ESTADO ====================
+
+    /**
+     * Cambia el estado de una solicitud validando las transiciones permitidas.
+     * RF-04: Registrada → Clasificada → En atención → Atendida → Cerrada
+     */
+    public SolicitudResponseDTO cambiarEstado(Long solicitudId, CambioEstadoRequestDTO request) {
+        Solicitud solicitud = buscarSolicitudPorId(solicitudId);
+        Usuario usuario = usuarioService.buscarUsuarioPorId(request.getUsuarioId());
+
+        validarNoEstaCerrada(solicitud);
+        validarTransicion(solicitud, request.getNuevoEstado());
+
+        EstadoSolicitud estadoAnterior = solicitud.getEstado();
+        solicitud.setEstado(request.getNuevoEstado());
+
+        // RF-06: Registrar en historial
+        HistorialSolicitud historial = crearEntradaHistorial(
+                solicitud, usuario,
+                "Estado cambiado de " + estadoAnterior.getDescripcion() + " a " + request.getNuevoEstado().getDescripcion(),
+                request.getObservaciones()
+        );
+        solicitud.agregarHistorial(historial);
+
+        solicitud = solicitudRepository.save(solicitud);
+        return mapper.toSolicitudDTO(solicitud);
+    }
+
+    // ==================== RF-05: ASIGNACIÓN DE RESPONSABLES ====================
+
+    /**
+     * Asigna un responsable a una solicitud.
+     * RF-05: El responsable debe estar activo y la asignación queda registrada.
+     */
+    public SolicitudResponseDTO asignarResponsable(Long solicitudId, AsignacionRequestDTO request) {
+        Solicitud solicitud = buscarSolicitudPorId(solicitudId);
+        Usuario responsable = usuarioService.buscarUsuarioPorId(request.getResponsableId());
+        Usuario asignador = usuarioService.buscarUsuarioPorId(request.getUsuarioAsignadorId());
+
+        validarNoEstaCerrada(solicitud);
+
+        // RF-05: Verificar que el responsable esté activo
+        if (!responsable.getActivo()) {
+            throw new OperacionNoPermitidaException(
+                    "El responsable " + responsable.getNombreCompleto() + " no está activo en el sistema");
+        }
+
+        // Verificar que tenga rol apropiado para ser responsable
+        if (responsable.getRol() != Rol.RESPONSABLE && responsable.getRol() != Rol.ADMINISTRATIVO
+                && responsable.getRol() != Rol.DOCENTE) {
+            throw new OperacionNoPermitidaException(
+                    "El usuario no tiene un rol válido para ser responsable de una solicitud");
+        }
+
+        solicitud.setResponsable(responsable);
+
+        // RF-06: Registrar asignación en historial
+        HistorialSolicitud historial = crearEntradaHistorial(
+                solicitud, asignador,
+                "Responsable asignado: " + responsable.getNombreCompleto(),
+                request.getObservaciones()
+        );
+        solicitud.agregarHistorial(historial);
+
+        solicitud = solicitudRepository.save(solicitud);
+        return mapper.toSolicitudDTO(solicitud);
+    }
+
+    // ==================== RF-08: CIERRE DE SOLICITUDES ====================
+
+    /**
+     * Cierra una solicitud.
+     * RF-08: Solo se puede cerrar si está ATENDIDA y se requiere observación de cierre.
+     * Una vez cerrada, no puede ser modificada.
+     */
+    public SolicitudResponseDTO cerrarSolicitud(Long solicitudId, CierreRequestDTO request) {
+        Solicitud solicitud = buscarSolicitudPorId(solicitudId);
+        Usuario usuario = usuarioService.buscarUsuarioPorId(request.getUsuarioId());
+
+        // RF-08: Verificar que la solicitud esté en estado ATENDIDA
+        if (solicitud.getEstado() != EstadoSolicitud.ATENDIDA) {
+            throw new TransicionInvalidaException(
+                    "Solo se pueden cerrar solicitudes en estado ATENDIDA. Estado actual: "
+                            + solicitud.getEstado().getDescripcion());
+        }
+
+        // Aplicar cierre
+        solicitud.setEstado(EstadoSolicitud.CERRADA);
+        solicitud.setObservacionCierre(request.getObservacionCierre());
+
+        // RF-06: Registrar cierre en historial
+        HistorialSolicitud historial = crearEntradaHistorial(
+                solicitud, usuario,
+                "Solicitud cerrada",
+                request.getObservacionCierre()
+        );
+        solicitud.agregarHistorial(historial);
+
+        solicitud = solicitudRepository.save(solicitud);
+        return mapper.toSolicitudDTO(solicitud);
+    }
+
+    // ==================== RF-07: CONSULTA DE SOLICITUDES ====================
+
+    /**
+     * Obtiene una solicitud por su ID con toda su información.
+     */
+    @Transactional(readOnly = true)
+    public SolicitudResponseDTO obtenerPorId(Long id) {
+        Solicitud solicitud = buscarSolicitudPorId(id);
+        return mapper.toSolicitudDTO(solicitud);
+    }
+
+    /**
+     * Obtiene todas las solicitudes registradas.
+     */
+    @Transactional(readOnly = true)
+    public List<SolicitudResponseDTO> obtenerTodas() {
+        return mapper.toSolicitudDTOList(solicitudRepository.findAll());
+    }
+
+    /**
+     * RF-07: Consulta solicitudes según criterios: estado, tipo, prioridad, responsable.
+     */
+    @Transactional(readOnly = true)
+    public List<SolicitudResponseDTO> consultarConFiltros(
+            EstadoSolicitud estado,
+            TipoSolicitud tipo,
+            Prioridad prioridad,
+            Long responsableId) {
+        List<Solicitud> solicitudes = solicitudRepository.buscarConFiltros(
+                estado, tipo, prioridad, responsableId);
+        return mapper.toSolicitudDTOList(solicitudes);
+    }
+
+    /**
+     * Consulta solicitudes por estado.
+     */
+    @Transactional(readOnly = true)
+    public List<SolicitudResponseDTO> consultarPorEstado(EstadoSolicitud estado) {
+        return mapper.toSolicitudDTOList(solicitudRepository.findByEstado(estado));
+    }
+
+    /**
+     * Consulta solicitudes por solicitante.
+     */
+    @Transactional(readOnly = true)
+    public List<SolicitudResponseDTO> consultarPorSolicitante(Long solicitanteId) {
+        return mapper.toSolicitudDTOList(solicitudRepository.findBySolicitanteId(solicitanteId));
+    }
+
+    /**
+     * Consulta solicitudes asignadas a un responsable.
+     */
+    @Transactional(readOnly = true)
+    public List<SolicitudResponseDTO> consultarPorResponsable(Long responsableId) {
+        return mapper.toSolicitudDTOList(solicitudRepository.findByResponsableId(responsableId));
+    }
+
+    // ==================== MÉTODOS UTILITARIOS PRIVADOS ====================
+
+    /**
+     * Busca una solicitud por ID, lanza excepción si no existe.
+     */
+    private Solicitud buscarSolicitudPorId(Long id) {
+        return solicitudRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Solicitud", id));
+    }
+
+    /**
+     * RF-04: Valida que la transición de estado sea coherente.
+     */
+    private void validarTransicion(Solicitud solicitud, EstadoSolicitud nuevoEstado) {
+        if (!solicitud.getEstado().puedeTransicionarA(nuevoEstado)) {
+            throw new TransicionInvalidaException(
+                    solicitud.getEstado().getDescripcion(),
+                    nuevoEstado.getDescripcion());
+        }
+    }
+
+    /**
+     * RF-08: Valida que la solicitud no esté cerrada (no permite modificaciones).
+     */
+    private void validarNoEstaCerrada(Solicitud solicitud) {
+        if (solicitud.getEstado() == EstadoSolicitud.CERRADA) {
+            throw new OperacionNoPermitidaException(
+                    "La solicitud #" + solicitud.getId() + " está cerrada y no puede ser modificada");
+        }
+    }
+
+    /**
+     * RF-06: Crea una entrada de historial con los datos requeridos.
+     */
+    private HistorialSolicitud crearEntradaHistorial(Solicitud solicitud, Usuario usuario,
+                                                      String accion, String observaciones) {
+        return HistorialSolicitud.builder()
+                .solicitud(solicitud)
+                .fechaHora(LocalDateTime.now())
+                .accion(accion)
+                .usuario(usuario)
+                .observaciones(observaciones)
+                .build();
+    }
+}

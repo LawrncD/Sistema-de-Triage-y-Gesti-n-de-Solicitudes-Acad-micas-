@@ -1,0 +1,27 @@
+package co.edu.uniquindio.poo.dto.request;
+
+import co.edu.uniquindio.poo.model.enums.TipoSolicitud;
+import jakarta.validation.constraints.NotNull;
+import lombok.*;
+
+/**
+ * DTO para clasificar una solicitud según su tipo.
+ * RF-02: Clasificación de solicitudes.
+ */
+@Getter
+@Setter
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
+public class ClasificacionRequestDTO {
+
+    @NotNull(message = "El tipo de solicitud es obligatorio")
+    private TipoSolicitud tipoSolicitud;
+
+    /** ID del usuario que realiza la clasificación */
+    @NotNull(message = "El ID del usuario clasificador es obligatorio")
+    private Long usuarioId;
+
+    /** Observaciones opcionales sobre la clasificación */
+    private String observaciones;
+}
