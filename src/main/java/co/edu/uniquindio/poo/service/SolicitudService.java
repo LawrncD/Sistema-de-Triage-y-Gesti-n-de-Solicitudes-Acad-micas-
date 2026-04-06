@@ -1,9 +1,12 @@
 package co.edu.uniquindio.poo.service;
 
-import co.edu.uniquindio.poo.dto.request.*;
-import co.edu.uniquindio.poo.dto.response.HistorialResponseDTO;
-import co.edu.uniquindio.poo.dto.response.PageResponseDTO;
-import co.edu.uniquindio.poo.dto.response.SolicitudResponseDTO;
+import co.edu.uniquindio.poo.dto.common.*;
+import co.edu.uniquindio.poo.dto.solicitud.*;
+import co.edu.uniquindio.poo.dto.usuario.*;
+import co.edu.uniquindio.poo.dto.ia.*;
+import co.edu.uniquindio.poo.dto.historial.HistorialResponseDTO;
+import co.edu.uniquindio.poo.dto.common.PageResponseDTO;
+import co.edu.uniquindio.poo.dto.solicitud.SolicitudResponseDTO;
 import co.edu.uniquindio.poo.exception.*;
 import co.edu.uniquindio.poo.mapper.EntityMapper;
 import co.edu.uniquindio.poo.model.entity.HistorialSolicitud;
@@ -57,8 +60,19 @@ public class SolicitudService {
      * El estado inicial es REGISTRADA y se genera la primera entrada en el historial.
      */
     public SolicitudResponseDTO registrarSolicitud(SolicitudRequestDTO request) {
-        // Verificar que el solicitante existe
-        Usuario solicitante = usuarioService.buscarUsuarioPorId(request.getSolicitanteId());
+        
+        Usuario actorActual = actorContextService.obtenerActorActual();
+        Usuario solicitante;
+
+        if (request.getSolicitanteId() != null && !request.getSolicitanteId().equals(actorActual.getId())) {
+            if (actorActual.getRol() == co.edu.uniquindio.poo.model.enums.Rol.ADMINISTRATIVO) {
+                solicitante = usuarioService.buscarUsuarioPorId(request.getSolicitanteId());
+            } else {
+                throw new co.edu.uniquindio.poo.exception.OperacionNoPermitidaException("No tiene permisos para registrar una solicitud a nombre de otro usuario.");
+            }
+        } else {
+            solicitante = actorActual;
+        }
 
         if (request.getFechaLimite() != null && request.getFechaLimite().isBefore(LocalDate.now())) {
             throw new IllegalArgumentException("La fecha límite no puede ser anterior a la fecha actual");
@@ -320,6 +334,16 @@ public class SolicitudService {
      * Retorna las acciones en orden cronológico sin cargar la solicitud completa.
      */
     @Transactional(readOnly = true)
+    public List<HistorialResponseDTO> obtenerHistorialPorUsuario(Long usuarioId) {
+        return historialRepository.findByUsuarioId(usuarioId).stream()
+                .map(mapper::toHistorialDTO).collect(java.util.stream.Collectors.toList());
+    }
+
+    public List<HistorialResponseDTO> obtenerTodosHistoriales() {
+        return historialRepository.findAll().stream()
+                .map(mapper::toHistorialDTO).collect(java.util.stream.Collectors.toList());
+    }
+
     public List<HistorialResponseDTO> obtenerHistorial(Long solicitudId) {
         // Verificar que la solicitud existe
         buscarSolicitudPorId(solicitudId);

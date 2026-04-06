@@ -1,8 +1,8 @@
 package co.edu.uniquindio.poo.controller;
 
-import co.edu.uniquindio.poo.dto.request.SugerenciaIARequestDTO;
-import co.edu.uniquindio.poo.dto.response.ApiResponseDTO;
-import co.edu.uniquindio.poo.dto.response.SugerenciaIAResponseDTO;
+import co.edu.uniquindio.poo.dto.ia.SugerenciaIARequestDTO;
+import co.edu.uniquindio.poo.dto.common.ApiResponseDTO;
+import co.edu.uniquindio.poo.dto.ia.SugerenciaIAResponseDTO;
 import co.edu.uniquindio.poo.service.AsistenciaIAService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;

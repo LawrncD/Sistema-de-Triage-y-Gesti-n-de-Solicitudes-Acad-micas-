@@ -4,13 +4,16 @@ import { SolicitudListComponent } from './components/solicitud-list/solicitud-li
 import { SolicitudCreateComponent } from './components/solicitud-create/solicitud-create.component';
 import { SolicitudDetailComponent } from './components/solicitud-detail/solicitud-detail.component';
 import { UsuarioListComponent } from './components/usuario-list/usuario-list.component';
+import { AuthComponent } from './components/auth/auth.component';
+import { authGuard } from './core/guards/auth.guard';
 
 export const routes: Routes = [
-  { path: '', redirectTo: 'dashboard', pathMatch: 'full' },
-  { path: 'dashboard', component: DashboardComponent },
-  { path: 'solicitudes', component: SolicitudListComponent },
-  { path: 'solicitudes/nueva', component: SolicitudCreateComponent },
-  { path: 'solicitudes/:id', component: SolicitudDetailComponent },
-  { path: 'usuarios', component: UsuarioListComponent },
-  { path: '**', redirectTo: 'dashboard' }
+  { path: '', redirectTo: 'login', pathMatch: 'full' },
+  { path: 'login', component: AuthComponent },
+  { path: 'dashboard', component: DashboardComponent, canActivate: [authGuard] },
+  { path: 'solicitudes', component: SolicitudListComponent, canActivate: [authGuard] },
+  { path: 'solicitudes/nueva', component: SolicitudCreateComponent, canActivate: [authGuard] },
+  { path: 'solicitudes/:id', component: SolicitudDetailComponent, canActivate: [authGuard] },
+  { path: 'usuarios', component: UsuarioListComponent, canActivate: [authGuard] },
+  { path: '**', redirectTo: 'login' }
 ];

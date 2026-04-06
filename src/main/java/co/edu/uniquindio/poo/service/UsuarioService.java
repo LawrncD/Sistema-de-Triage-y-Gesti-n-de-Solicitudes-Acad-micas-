@@ -1,7 +1,7 @@
 package co.edu.uniquindio.poo.service;
 
-import co.edu.uniquindio.poo.dto.request.UsuarioRequestDTO;
-import co.edu.uniquindio.poo.dto.response.UsuarioResponseDTO;
+import co.edu.uniquindio.poo.dto.usuario.UsuarioRequestDTO;
+import co.edu.uniquindio.poo.dto.usuario.UsuarioResponseDTO;
 import co.edu.uniquindio.poo.exception.OperacionNoPermitidaException;
 import co.edu.uniquindio.poo.exception.ResourceNotFoundException;
 import co.edu.uniquindio.poo.mapper.EntityMapper;

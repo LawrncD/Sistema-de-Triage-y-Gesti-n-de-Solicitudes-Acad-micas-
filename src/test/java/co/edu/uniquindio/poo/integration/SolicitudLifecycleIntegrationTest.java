@@ -1,6 +1,9 @@
 package co.edu.uniquindio.poo.integration;
 
-import co.edu.uniquindio.poo.dto.request.*;
+import co.edu.uniquindio.poo.dto.common.*;
+import co.edu.uniquindio.poo.dto.solicitud.*;
+import co.edu.uniquindio.poo.dto.usuario.*;
+import co.edu.uniquindio.poo.dto.ia.*;
 import co.edu.uniquindio.poo.model.enums.*;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;

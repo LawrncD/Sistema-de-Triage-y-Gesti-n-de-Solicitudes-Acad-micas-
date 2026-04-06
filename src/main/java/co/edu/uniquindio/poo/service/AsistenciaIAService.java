@@ -1,8 +1,8 @@
 package co.edu.uniquindio.poo.service;
 
-import co.edu.uniquindio.poo.dto.request.SugerenciaIARequestDTO;
-import co.edu.uniquindio.poo.dto.response.SolicitudResponseDTO;
-import co.edu.uniquindio.poo.dto.response.SugerenciaIAResponseDTO;
+import co.edu.uniquindio.poo.dto.ia.SugerenciaIARequestDTO;
+import co.edu.uniquindio.poo.dto.solicitud.SolicitudResponseDTO;
+import co.edu.uniquindio.poo.dto.ia.SugerenciaIAResponseDTO;
 import co.edu.uniquindio.poo.model.enums.Prioridad;
 import co.edu.uniquindio.poo.model.enums.TipoSolicitud;
 import lombok.RequiredArgsConstructor;

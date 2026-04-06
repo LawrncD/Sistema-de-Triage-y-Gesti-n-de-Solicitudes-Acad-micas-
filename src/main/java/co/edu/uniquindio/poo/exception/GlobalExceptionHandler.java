@@ -1,6 +1,6 @@
 package co.edu.uniquindio.poo.exception;
 
-import co.edu.uniquindio.poo.dto.response.ApiResponseDTO;
+import co.edu.uniquindio.poo.dto.common.ApiResponseDTO;
 import jakarta.validation.ConstraintViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;

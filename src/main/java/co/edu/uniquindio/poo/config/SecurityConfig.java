@@ -34,7 +34,7 @@ public class SecurityConfig {
                         .frameOptions(HeadersConfigurer.FrameOptionsConfig::sameOrigin))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/h2-console/**").permitAll()
-                        .requestMatchers("/swagger-ui/**", "/api-docs/**", "/swagger-ui.html").permitAll()
+                        .requestMatchers("/swagger-ui/**", "/api-docs/**", "/swagger-ui.html", "/api/auth/**").permitAll()
                     .requestMatchers(HttpMethod.POST, "/api/solicitudes").hasAnyRole("ESTUDIANTE", "ADMINISTRATIVO", "RESPONSABLE")
                     .requestMatchers(HttpMethod.GET, "/api/solicitudes/**").hasAnyRole("ESTUDIANTE", "DOCENTE", "ADMINISTRATIVO", "RESPONSABLE")
                     .requestMatchers(HttpMethod.PUT, "/api/solicitudes/**").hasAnyRole("ADMINISTRATIVO", "RESPONSABLE")

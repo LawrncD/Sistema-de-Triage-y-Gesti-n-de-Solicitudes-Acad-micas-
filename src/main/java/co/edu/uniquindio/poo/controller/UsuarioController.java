@@ -1,8 +1,8 @@
 package co.edu.uniquindio.poo.controller;
 
-import co.edu.uniquindio.poo.dto.request.UsuarioRequestDTO;
-import co.edu.uniquindio.poo.dto.response.ApiResponseDTO;
-import co.edu.uniquindio.poo.dto.response.UsuarioResponseDTO;
+import co.edu.uniquindio.poo.dto.usuario.UsuarioRequestDTO;
+import co.edu.uniquindio.poo.dto.common.ApiResponseDTO;
+import co.edu.uniquindio.poo.dto.usuario.UsuarioResponseDTO;
 import co.edu.uniquindio.poo.model.enums.Rol;
 import co.edu.uniquindio.poo.service.UsuarioService;
 import jakarta.validation.Valid;

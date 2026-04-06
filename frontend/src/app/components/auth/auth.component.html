@@ -1,0 +1,64 @@
+<div class="auth-wrapper">
+  <div class="auth-card fade-in">
+    <div class="auth-header">
+      <div class="logo">
+        <i class="fas fa-graduation-cap"></i>
+      </div>
+      <h2>{{ isLogin ? 'Bienvenido de Nuevo' : 'Crea tu Cuenta' }}</h2>
+      <p>{{ isLogin ? 'Ingresa tus credenciales para acceder' : 'Ãšnete al sistema acadÃ©mico' }}</p>
+    </div>
+
+    <div *ngIf="errorMsg" class="alert-error">
+      <i class="fas fa-exclamation-circle"></i> {{ errorMsg }}
+    </div>
+
+    <form [formGroup]="authForm" (ngSubmit)="onSubmit()" class="auth-form">
+      <div class="input-group">
+        <label>Correo ElectrÃ³nico</label>
+        <input type="email" formControlName="email" placeholder="ejemplo@uniquindio.edu.co" 
+          [class.invalid]="authForm.get('email')?.invalid && authForm.get('email')?.touched">
+      </div>
+      
+      <div class="input-group">
+        <label>ContraseÃ±a</label>
+        <input type="password" formControlName="password" placeholder="Tu contraseÃ±a secreta" 
+          [class.invalid]="authForm.get('password')?.invalid && authForm.get('password')?.touched">
+      </div>
+
+      <ng-container *ngIf="!isLogin">
+        <div class="input-group">
+          <label>IdentificaciÃ³n</label>
+          <input type="text" formControlName="identificacion" placeholder="Documento de identidad">
+        </div>
+        <div class="row-group">
+          <div class="input-group">
+            <label>Nombre</label>
+            <input type="text" formControlName="nombre" placeholder="Tu nombre">
+          </div>
+          <div class="input-group">
+            <label>Apellido</label>
+            <input type="text" formControlName="apellido" placeholder="Tus apellidos">
+          </div>
+        </div>
+        <div class="input-group">
+          <label>Rol AcadÃ©mico</label>
+          <select formControlName="rol">
+            <option value="ESTUDIANTE">Soy Estudiante</option>
+            <option value="DOCENTE">Soy Docente</option>
+            <option value="ADMINISTRATIVO">Soy Administrativo</option>
+          </select>
+        </div>
+      </ng-container>
+
+      <button type="submit" class="btn-primary" [disabled]="loading">
+        <span *ngIf="!loading">{{ isLogin ? 'Iniciar SesiÃ³n' : 'Registrarse' }}</span>
+        <span *ngIf="loading" class="spinner"></span>
+      </button>
+    </form>
+
+    <div class="auth-footer">
+      <p *ngIf="isLogin">Â¿No tienes cuenta? <a (click)="toggleMode()">RegÃstrate aquÃ</a></p>
+      <p *ngIf="!isLogin">Â¿Ya tienes cuenta? <a (click)="toggleMode()">Inicia SesiÃ³n</a></p>
+    </div>
+  </div>
+</div>

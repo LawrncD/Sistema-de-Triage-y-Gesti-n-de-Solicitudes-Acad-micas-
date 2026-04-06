@@ -1,8 +1,8 @@
 package co.edu.uniquindio.poo.mapper;
 
-import co.edu.uniquindio.poo.dto.response.HistorialResponseDTO;
-import co.edu.uniquindio.poo.dto.response.SolicitudResponseDTO;
-import co.edu.uniquindio.poo.dto.response.UsuarioResponseDTO;
+import co.edu.uniquindio.poo.dto.historial.HistorialResponseDTO;
+import co.edu.uniquindio.poo.dto.solicitud.SolicitudResponseDTO;
+import co.edu.uniquindio.poo.dto.usuario.UsuarioResponseDTO;
 import co.edu.uniquindio.poo.model.entity.HistorialSolicitud;
 import co.edu.uniquindio.poo.model.entity.Solicitud;
 import co.edu.uniquindio.poo.model.entity.Usuario;
