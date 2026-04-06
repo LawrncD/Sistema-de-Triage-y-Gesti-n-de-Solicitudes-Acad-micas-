@@ -9,7 +9,8 @@ import {
   UsuarioResponse,
   CanalOrigen,
   CANAL_LABELS,
-  Rol
+  Rol,
+  ROL_LABELS
 } from '../../models';
 
 @Component({
@@ -121,12 +122,27 @@ import {
                 </svg>
                 Solicitante
               </label>
-              <select id="solicitante" [(ngModel)]="solicitud.solicitanteId" name="solicitanteId" required class="form-input">
-                <option [ngValue]="0" disabled>Seleccione un solicitante...</option>
-                @for (u of usuarios; track u.id) {
-                  <option [ngValue]="u.id">{{ u.nombre }} {{ u.apellido }}</option>
-                }
-              </select>
+              @if (cargandoUsuarios) {
+                <div class="loading-select">
+                  <span class="spinner-xs"></span>
+                  Cargando usuarios...
+                </div>
+              } @else if (usuarios.length === 0) {
+                <div class="empty-select">
+                  <span>No hay usuarios disponibles</span>
+                  <button type="button" class="btn-retry" (click)="cargarUsuarios()">
+                    Reintentar
+                  </button>
+                </div>
+              } @else {
+                <select id="solicitante" [(ngModel)]="solicitud.solicitanteId" name="solicitanteId" required class="form-input">
+                  <option [ngValue]="0" disabled>Seleccione un solicitante...</option>
+                  @for (u of usuarios; track u.id) {
+                    <option [ngValue]="u.id">{{ u.nombre }} {{ u.apellido }} ({{ rolLabel(u.rol) }})</option>
+                  }
+                </select>
+                <span class="field-hint">{{ usuarios.length }} usuario(s) disponible(s)</span>
+              }
             </div>
           </div>
 
@@ -385,8 +401,64 @@ import {
       animation: spin 0.8s linear infinite;
     }
 
+    .spinner-xs {
+      width: 14px;
+      height: 14px;
+      border: 2px solid var(--color-border, #e0dcd5);
+      border-top-color: var(--color-primary, #8b7355);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
     @keyframes spin {
       to { transform: rotate(360deg); }
+    }
+
+    .loading-select {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.75rem 1rem;
+      background: var(--color-bg, #f7f5f2);
+      border: 1px solid var(--color-border, #e0dcd5);
+      border-radius: 10px;
+      font-size: 0.9rem;
+      color: var(--color-text-secondary, #6b6b6b);
+    }
+
+    .empty-select {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0.75rem 1rem;
+      background: #fef2f2;
+      border: 1px solid #fecaca;
+      border-radius: 10px;
+      font-size: 0.9rem;
+      color: #b91c1c;
+    }
+
+    .btn-retry {
+      padding: 0.35rem 0.75rem;
+      background: white;
+      border: 1px solid #fecaca;
+      border-radius: 6px;
+      font-size: 0.8rem;
+      color: #b91c1c;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .btn-retry:hover {
+      background: #fef2f2;
+      border-color: #b91c1c;
+    }
+
+    .field-hint {
+      display: block;
+      font-size: 0.75rem;
+      color: var(--color-text-muted, #9a9a9a);
+      margin-top: 0.3rem;
     }
 
     @media (max-width: 640px) {
@@ -426,6 +498,7 @@ export class SolicitudCreateComponent implements OnInit {
   usuarios: UsuarioResponse[] = [];
   canales = Object.values(CanalOrigen);
   enviando = false;
+  cargandoUsuarios = true;
   mensajeError = '';
   mensajeExito = '';
 
@@ -436,9 +509,25 @@ export class SolicitudCreateComponent implements OnInit {
   ) {}
 
   ngOnInit(): void {
+    this.cargarUsuarios();
+  }
+
+  cargarUsuarios(): void {
+    this.cargandoUsuarios = true;
     this.usuarioService.listarActivos().subscribe({
-      next: res => { if (res.exitoso) this.usuarios = res.datos; },
-      error: () => {}
+      next: res => {
+        this.cargandoUsuarios = false;
+        if (res.exitoso) {
+          this.usuarios = res.datos;
+          console.log('Usuarios cargados:', this.usuarios.length);
+        } else {
+          console.warn('Error al cargar usuarios:', res.mensaje);
+        }
+      },
+      error: (err) => {
+        this.cargandoUsuarios = false;
+        console.error('Error al cargar usuarios:', err);
+      }
     });
   }
 
@@ -472,4 +561,5 @@ export class SolicitudCreateComponent implements OnInit {
   }
 
   canalLabel(c: CanalOrigen): string { return CANAL_LABELS[c] || c; }
+  rolLabel(r: Rol): string { return ROL_LABELS[r] || r; }
 }
