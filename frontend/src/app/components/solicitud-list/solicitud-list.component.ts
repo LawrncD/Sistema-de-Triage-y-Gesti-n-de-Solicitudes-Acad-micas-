@@ -1,8 +1,10 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, OnDestroy, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { RouterLink } from '@angular/router';
+import { RouterLink, Router, NavigationEnd } from '@angular/router';
 import { FormsModule } from '@angular/forms';
+import { Subscription, filter, finalize } from 'rxjs';
 import { SolicitudService } from '../../services/solicitud.service';
+import { DataRefreshService } from '../../services/data-refresh.service';
 import {
   SolicitudResponse,
   EstadoSolicitud,
@@ -26,13 +28,23 @@ import {
           <h1 class="page-title">Solicitudes</h1>
           <p class="page-subtitle">Gestiona y da seguimiento a las solicitudes académicas</p>
         </div>
-        <a routerLink="/solicitudes/nueva" class="btn btn-primary">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <circle cx="12" cy="12" r="10"/>
-            <path d="M12 8v8M8 12h8"/>
-          </svg>
-          Nueva Solicitud
-        </a>
+        <div class="header-actions">
+          <button class="btn btn-refresh" (click)="cargarSolicitudes()" [disabled]="cargando" title="Actualizar lista">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" [class.spinning]="cargando">
+              <path d="M23 4v6h-6"/>
+              <path d="M1 20v-6h6"/>
+              <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
+            </svg>
+            {{ cargando ? 'Actualizando...' : 'Actualizar' }}
+          </button>
+          <a routerLink="/solicitudes/nueva" class="btn btn-primary">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10"/>
+              <path d="M12 8v8M8 12h8"/>
+            </svg>
+            Nueva Solicitud
+          </a>
+        </div>
       </div>
 
       <!-- Filters -->
@@ -170,6 +182,12 @@ import {
       margin-bottom: 2rem;
     }
 
+    .header-actions {
+      display: flex;
+      gap: 0.75rem;
+      align-items: center;
+    }
+
     .header-content h1 {
       font-size: 1.75rem;
       font-weight: 600;
@@ -195,6 +213,31 @@ import {
       transition: all 0.2s ease;
       text-decoration: none;
       border: none;
+    }
+
+    .btn-refresh {
+      background: var(--color-card, #ffffff);
+      color: var(--color-text-secondary, #6b6b6b);
+      border: 1px solid var(--color-border, #e0dcd5);
+    }
+
+    .btn-refresh:hover:not(:disabled) {
+      border-color: var(--color-primary, #8b7355);
+      color: var(--color-primary, #8b7355);
+      background: rgba(139, 115, 85, 0.05);
+    }
+
+    .btn-refresh:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
+    .btn-refresh svg.spinning {
+      animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
     }
 
     .btn-primary {
@@ -476,7 +519,7 @@ import {
     }
   `]
 })
-export class SolicitudListComponent implements OnInit {
+export class SolicitudListComponent implements OnInit, OnDestroy {
   solicitudes: SolicitudResponse[] = [];
   cargando = true;
   estados = Object.values(EstadoSolicitud);
@@ -487,20 +530,46 @@ export class SolicitudListComponent implements OnInit {
   filtroTipo = '';
   filtroPrioridad = '';
 
-  constructor(private solicitudService: SolicitudService) {}
+  private routerSub?: Subscription;
+  private refreshSub?: Subscription;
+
+  constructor(
+    private solicitudService: SolicitudService,
+    private router: Router,
+    private cdr: ChangeDetectorRef,
+    private refreshService: DataRefreshService
+  ) {}
 
   ngOnInit(): void {
-    this.cargar();
+    this.cargarSolicitudes();
+    
+    // Recargar datos cada vez que se navega A esta ruta
+    this.routerSub = this.router.events.pipe(
+      filter(event => event instanceof NavigationEnd)
+    ).subscribe((event: any) => {
+      if (event.urlAfterRedirects === '/solicitudes') {
+        this.cargarSolicitudes();
+      }
+    });
   }
 
-  cargar(): void {
+  ngOnDestroy(): void {
+    this.routerSub?.unsubscribe();
+  }
+
+  cargarSolicitudes(): void {
     this.cargando = true;
-    this.solicitudService.listarTodas().subscribe({
+    this.solicitudService.listarTodas().pipe(
+      finalize(() => {
+        this.cargando = false;
+        this.cdr.markForCheck();
+      })
+    ).subscribe({
       next: res => {
         this.solicitudes = res.exitoso ? res.datos : [];
-        this.cargando = false;
+        this.cdr.markForCheck();
       },
-      error: () => { this.cargando = false; }
+      error: (err) => { console.error('Error al cargar solicitudes:', err); }
     });
   }
 
@@ -511,12 +580,19 @@ export class SolicitudListComponent implements OnInit {
     if (this.filtroTipo) filtros.tipo = this.filtroTipo;
     if (this.filtroPrioridad) filtros.prioridad = this.filtroPrioridad;
 
-    this.solicitudService.listar(filtros).subscribe({
+    this.solicitudService.listar(filtros).pipe(
+      finalize(() => {
+        this.cargando = false;
+        this.cdr.markForCheck();
+      })
+    ).subscribe({
       next: res => {
         this.solicitudes = res.exitoso ? res.datos : [];
-        this.cargando = false;
+        this.cdr.markForCheck();
       },
-      error: () => { this.cargando = false; }
+      error: (err) => {
+        console.error('Error al aplicar filtros:', err);
+      }
     });
   }
 
@@ -524,7 +600,7 @@ export class SolicitudListComponent implements OnInit {
     this.filtroEstado = '';
     this.filtroTipo = '';
     this.filtroPrioridad = '';
-    this.cargar();
+    this.cargarSolicitudes();
   }
 
   estadoLabel(e: EstadoSolicitud): string { return ESTADO_LABELS[e] || e; }

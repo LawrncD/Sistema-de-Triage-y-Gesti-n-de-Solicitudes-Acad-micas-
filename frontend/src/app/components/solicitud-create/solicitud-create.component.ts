@@ -2,8 +2,10 @@ import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
+import { finalize } from 'rxjs';
 import { SolicitudService } from '../../services/solicitud.service';
 import { UsuarioService } from '../../services/usuario.service';
+import { DataRefreshService } from '../../services/data-refresh.service';
 import {
   SolicitudRequest,
   UsuarioResponse,
@@ -505,7 +507,8 @@ export class SolicitudCreateComponent implements OnInit {
   constructor(
     private solicitudService: SolicitudService,
     private usuarioService: UsuarioService,
-    private router: Router
+    private router: Router,
+    private refreshService: DataRefreshService
   ) {}
 
   ngOnInit(): void {
@@ -514,9 +517,10 @@ export class SolicitudCreateComponent implements OnInit {
 
   cargarUsuarios(): void {
     this.cargandoUsuarios = true;
-    this.usuarioService.listarActivos().subscribe({
+    this.usuarioService.listarActivos().pipe(
+      finalize(() => { this.cargandoUsuarios = false; })
+    ).subscribe({
       next: res => {
-        this.cargandoUsuarios = false;
         if (res.exitoso) {
           this.usuarios = res.datos;
           console.log('Usuarios cargados:', this.usuarios.length);
@@ -525,7 +529,6 @@ export class SolicitudCreateComponent implements OnInit {
         }
       },
       error: (err) => {
-        this.cargandoUsuarios = false;
         console.error('Error al cargar usuarios:', err);
       }
     });
@@ -539,18 +542,21 @@ export class SolicitudCreateComponent implements OnInit {
     const dto = { ...this.solicitud };
     if (!dto.fechaLimite) delete dto.fechaLimite;
 
-    this.solicitudService.registrar(dto).subscribe({
+    this.solicitudService.registrar(dto).pipe(
+      finalize(() => { this.enviando = false; })
+    ).subscribe({
       next: res => {
-        this.enviando = false;
         if (res.exitoso) {
           this.mensajeExito = 'Solicitud registrada exitosamente';
-          setTimeout(() => this.router.navigate(['/solicitudes', res.datos.id]), 1000);
+          // Notificar que hay nuevas solicitudes
+          this.refreshService.notifySolicitudesChanged();
+          // Dar un poco más de tiempo para que los datos se persistan
+          setTimeout(() => this.router.navigate(['/solicitudes']), 1200);
         } else {
           this.mensajeError = res.mensaje;
         }
       },
       error: err => {
-        this.enviando = false;
         this.mensajeError = err.error?.mensaje || 'Error al registrar la solicitud';
       }
     });

@@ -1,6 +1,8 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, OnDestroy, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { Router, NavigationEnd } from '@angular/router';
+import { Subscription, filter, finalize } from 'rxjs';
 import { UsuarioService } from '../../services/usuario.service';
 import {
   UsuarioResponse,
@@ -20,21 +22,31 @@ import {
           <h1 class="page-title">Usuarios</h1>
           <p class="page-subtitle">Gestión de usuarios del sistema</p>
         </div>
-        <button class="btn-primary" (click)="mostrarFormulario = !mostrarFormulario">
-          @if (mostrarFormulario) {
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <line x1="18" y1="6" x2="6" y2="18"/>
-              <line x1="6" y1="6" x2="18" y2="18"/>
+        <div class="header-actions">
+          <button class="btn-refresh" (click)="cargarUsuarios()" [disabled]="cargando" title="Actualizar lista">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" [class.spinning]="cargando">
+              <path d="M23 4v6h-6"/>
+              <path d="M1 20v-6h6"/>
+              <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
             </svg>
-            Cerrar
-          } @else {
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <line x1="12" y1="5" x2="12" y2="19"/>
-              <line x1="5" y1="12" x2="19" y2="12"/>
-            </svg>
-            Nuevo Usuario
-          }
-        </button>
+            {{ cargando ? 'Actualizando...' : 'Actualizar' }}
+          </button>
+          <button class="btn-primary" (click)="mostrarFormulario = !mostrarFormulario">
+            @if (mostrarFormulario) {
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="18" y1="6" x2="6" y2="18"/>
+                <line x1="6" y1="6" x2="18" y2="18"/>
+              </svg>
+              Cerrar
+            } @else {
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="12" y1="5" x2="12" y2="19"/>
+                <line x1="5" y1="12" x2="19" y2="12"/>
+              </svg>
+              Nuevo Usuario
+            }
+          </button>
+        </div>
       </header>
 
       @if (mensaje) {
@@ -195,6 +207,12 @@ import {
       margin-bottom: 1.5rem;
     }
 
+    .header-actions {
+      display: flex;
+      gap: 0.75rem;
+      align-items: center;
+    }
+
     .page-title {
       font-size: 1.75rem;
       font-weight: 700;
@@ -209,6 +227,40 @@ import {
     }
 
     /* Buttons */
+    .btn-refresh {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.7rem 1.25rem;
+      background: var(--color-card, #ffffff);
+      color: var(--color-text-secondary, #6b6b6b);
+      border: 1px solid var(--color-border, #e0dcd5);
+      border-radius: var(--radius-md, 10px);
+      font-weight: 500;
+      font-size: 0.9rem;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .btn-refresh:hover:not(:disabled) {
+      border-color: var(--color-primary, #8b7355);
+      color: var(--color-primary, #8b7355);
+      background: rgba(139, 115, 85, 0.05);
+    }
+
+    .btn-refresh:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
+    .btn-refresh svg.spinning {
+      animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
     .btn-primary {
       display: inline-flex;
       align-items: center;
@@ -592,7 +644,7 @@ import {
     }
   `]
 })
-export class UsuarioListComponent implements OnInit {
+export class UsuarioListComponent implements OnInit, OnDestroy {
   usuarios: UsuarioResponse[] = [];
   cargando = true;
   mostrarFormulario = false;
@@ -610,20 +662,44 @@ export class UsuarioListComponent implements OnInit {
     password: ''
   };
 
-  constructor(private usuarioService: UsuarioService) {}
+  private routerSub?: Subscription;
+
+  constructor(
+    private usuarioService: UsuarioService,
+    private router: Router,
+    private cdr: ChangeDetectorRef
+  ) {}
 
   ngOnInit(): void {
-    this.cargar();
+    this.cargarUsuarios();
+    
+    // Recargar datos cada vez que se navega a esta ruta
+    this.routerSub = this.router.events.pipe(
+      filter(event => event instanceof NavigationEnd)
+    ).subscribe((event: any) => {
+      if (event.urlAfterRedirects === '/usuarios') {
+        this.cargarUsuarios();
+      }
+    });
   }
 
-  cargar(): void {
+  ngOnDestroy(): void {
+    this.routerSub?.unsubscribe();
+  }
+
+  cargarUsuarios(): void {
     this.cargando = true;
-    this.usuarioService.listarTodos().subscribe({
+    this.usuarioService.listarTodos().pipe(
+      finalize(() => {
+        this.cargando = false;
+        this.cdr.markForCheck();
+      })
+    ).subscribe({
       next: res => {
         this.usuarios = res.exitoso ? res.datos : [];
-        this.cargando = false;
+        this.cdr.markForCheck();
       },
-      error: () => { this.cargando = false; }
+      error: (err) => { console.error('Error al cargar usuarios:', err); }
     });
   }
 
@@ -637,10 +713,16 @@ export class UsuarioListComponent implements OnInit {
         if (res.exitoso) {
           this.show(this.editandoId ? 'Usuario actualizado' : 'Usuario creado exitosamente', false);
           this.cancelarForm();
-          this.cargar();
+          // Pequeño delay para permitir que Angular detecte cambios antes de cargar
+          setTimeout(() => this.cargarUsuarios(), 100);
+        } else {
+          this.show(res.mensaje || 'Error al guardar', true);
         }
       },
-      error: err => this.show(err.error?.mensaje || 'Error al guardar', true)
+      error: err => {
+        this.show(err.error?.mensaje || 'Error al guardar', true);
+        console.error('Error al guardar usuario:', err);
+      }
     });
   }
 
@@ -660,8 +742,14 @@ export class UsuarioListComponent implements OnInit {
   desactivar(id: number): void {
     if (confirm('¿Desactivar este usuario?')) {
       this.usuarioService.desactivar(id).subscribe({
-        next: () => { this.show('Usuario desactivado', false); this.cargar(); },
-        error: err => this.show(err.error?.mensaje || 'Error al desactivar', true)
+        next: () => {
+          this.show('Usuario desactivado', false);
+          setTimeout(() => this.cargarUsuarios(), 100);
+        },
+        error: err => {
+          this.show(err.error?.mensaje || 'Error al desactivar', true);
+          console.error('Error al desactivar usuario:', err);
+        }
       });
     }
   }

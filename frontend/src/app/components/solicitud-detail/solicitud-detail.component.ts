@@ -1,7 +1,8 @@
-import { Component, OnInit, Pipe, PipeTransform } from '@angular/core';
+import { Component, OnInit, Pipe, PipeTransform, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
+import { finalize } from 'rxjs';
 import { SolicitudService } from '../../services/solicitud.service';
 import { UsuarioService } from '../../services/usuario.service';
 import { IaService, SugerenciaIAResponseDTO } from '../../services/ia.service';
@@ -835,29 +836,43 @@ export class SolicitudDetailComponent implements OnInit {
     private router: Router,
     private solicitudService: SolicitudService,
     private usuarioService: UsuarioService,
-    private iaService: IaService
+    private iaService: IaService,
+    private cdr: ChangeDetectorRef
   ) {}
 
   ngOnInit(): void {
     this.solicitudId = Number(this.route.snapshot.paramMap.get('id'));
     this.cargar();
-    this.usuarioService.listarPorRol(Rol.RESPONSABLE).subscribe({
-      next: res => { if (res.exitoso) this.responsables = res.datos; }
+    this.usuarioService.listarPorRol(Rol.RESPONSABLE).pipe(
+      finalize(() => this.cdr.markForCheck())
+    ).subscribe({
+      next: res => {
+        if (res.exitoso) this.responsables = res.datos;
+        this.cdr.markForCheck();
+      },
+      error: (err) => { console.error('Error al cargar responsables:', err); }
     });
   }
 
   cargar(): void {
     this.cargando = true;
-    this.solicitudService.obtenerPorId(this.solicitudId).subscribe({
+    this.solicitudService.obtenerPorId(this.solicitudId).pipe(
+      finalize(() => {
+        this.cargando = false;
+        this.cdr.markForCheck();
+      })
+    ).subscribe({
       next: res => {
         if (res.exitoso) {
           this.solicitud = res.datos;
           this.historial = res.datos.historial || [];
           this.actualizarEstadosDisponibles();
         }
-        this.cargando = false;
+        this.cdr.markForCheck();
       },
-      error: () => { this.cargando = false; }
+      error: (err) => {
+        console.error('Error al cargar solicitud:', err);
+      }
     });
   }
 
@@ -883,17 +898,21 @@ export class SolicitudDetailComponent implements OnInit {
   sugerirIA(): void {
     this.cargandoIA = true;
     this.sugerenciaIA = null;
-    this.iaService.obtenerClasificacionSugerida(this.solicitudId).subscribe({
+    this.iaService.obtenerClasificacionSugerida(this.solicitudId).pipe(
+      finalize(() => {
+        this.cargandoIA = false;
+        this.cdr.markForCheck();
+      })
+    ).subscribe({
       next: (res) => {
         if (res.exitoso) {
           this.sugerenciaIA = res.datos;
         } else {
           this.onError({ error: { mensaje: 'No se pudo obtener sugerencia IA, pero puede continuar manualmente.' }});
         }
-        this.cargandoIA = false;
+        this.cdr.markForCheck();
       },
       error: () => {
-        this.cargandoIA = false;
         // Gracia (Fallback) RF-11
         this.onError({ error: { mensaje: 'Servicio IA no disponible. La aplicación sigue operando normalmente.' }});
       }

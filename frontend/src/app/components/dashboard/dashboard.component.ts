@@ -1,7 +1,9 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, OnDestroy, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { RouterLink } from '@angular/router';
+import { RouterLink, Router, NavigationEnd } from '@angular/router';
+import { Subscription, filter, finalize } from 'rxjs';
 import { SolicitudService } from '../../services/solicitud.service';
+import { DataRefreshService } from '../../services/data-refresh.service';
 import {
   SolicitudResponse,
   EstadoSolicitud,
@@ -22,13 +24,23 @@ import {
           <h1 class="page-title">Dashboard</h1>
           <p class="page-subtitle">Resumen del sistema de solicitudes académicas</p>
         </div>
-        <a routerLink="/solicitudes/nueva" class="btn-primary">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <circle cx="12" cy="12" r="10"/>
-            <path d="M12 8v8M8 12h8"/>
-          </svg>
-          Nueva Solicitud
-        </a>
+        <div class="header-actions">
+          <button class="btn-refresh" (click)="cargar()" [disabled]="cargando" title="Actualizar datos">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" [class.spinning]="cargando">
+              <path d="M23 4v6h-6"/>
+              <path d="M1 20v-6h6"/>
+              <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
+            </svg>
+            {{ cargando ? 'Actualizando...' : 'Actualizar' }}
+          </button>
+          <a routerLink="/solicitudes/nueva" class="btn-primary">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10"/>
+              <path d="M12 8v8M8 12h8"/>
+            </svg>
+            Nueva Solicitud
+          </a>
+        </div>
       </header>
 
       <!-- Stats Cards -->
@@ -185,11 +197,43 @@ import {
       to { opacity: 1; transform: translateY(0); }
     }
 
+    .loading-overlay {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      padding: 0.75rem 1.25rem;
+      background: var(--color-card, #ffffff);
+      border: 1px solid var(--color-border, #e0dcd5);
+      border-radius: var(--radius-md, 10px);
+      margin-bottom: 1.5rem;
+      font-size: 0.9rem;
+      color: var(--color-text-secondary, #6b6b6b);
+    }
+
+    .spinner {
+      width: 20px;
+      height: 20px;
+      border: 2px solid var(--color-border, #e0dcd5);
+      border-top-color: var(--color-primary, #8b7355);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
     .page-header {
       display: flex;
       justify-content: space-between;
       align-items: flex-start;
       margin-bottom: 2rem;
+    }
+
+    .header-actions {
+      display: flex;
+      gap: 0.75rem;
+      align-items: center;
     }
 
     .page-title {
@@ -203,6 +247,36 @@ import {
     .page-subtitle {
       color: var(--color-text-secondary, #6b6b6b);
       font-size: 0.95rem;
+    }
+
+    .btn-refresh {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.75rem 1.25rem;
+      background: var(--color-card, #ffffff);
+      color: var(--color-text-secondary, #6b6b6b);
+      border: 1px solid var(--color-border, #e0dcd5);
+      border-radius: var(--radius-md, 10px);
+      font-weight: 500;
+      font-size: 0.9rem;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .btn-refresh:hover:not(:disabled) {
+      border-color: var(--color-primary, #8b7355);
+      color: var(--color-primary, #8b7355);
+      background: rgba(139, 115, 85, 0.05);
+    }
+
+    .btn-refresh:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
+    .btn-refresh svg.spinning {
+      animation: spin 1s linear infinite;
     }
 
     .btn-primary {
@@ -549,16 +623,61 @@ import {
     }
   `]
 })
-export class DashboardComponent implements OnInit {
+export class DashboardComponent implements OnInit, OnDestroy {
   solicitudes: SolicitudResponse[] = [];
   prioridades = Object.values(Prioridad);
+  cargando = true;
 
-  constructor(private solicitudService: SolicitudService) {}
+  private routerSub?: Subscription;
+  private refreshSub?: Subscription;
+
+  constructor(
+    private solicitudService: SolicitudService,
+    private router: Router,
+    private cdr: ChangeDetectorRef,
+    private refreshService: DataRefreshService
+  ) {}
 
   ngOnInit(): void {
-    this.solicitudService.listarTodas().subscribe({
-      next: res => { if (res.exitoso) this.solicitudes = res.datos; },
-      error: () => {}
+    this.cargar();
+    
+    // Recargar datos cada vez que se navega al dashboard
+    this.routerSub = this.router.events.pipe(
+      filter(event => event instanceof NavigationEnd)
+    ).subscribe((event: any) => {
+      if (event.urlAfterRedirects === '/dashboard' || event.urlAfterRedirects === '/solicitudes') {
+        this.cargar();
+      }
+    });
+    
+    // Recargar cuando hay cambios de solicitudes desde otros componentes
+    this.refreshSub = this.refreshService.getSolicitudesRefresh().subscribe(() => {
+      this.cargar();
+    });
+  }
+
+  ngOnDestroy(): void {
+    this.routerSub?.unsubscribe();
+    this.refreshSub?.unsubscribe();
+  }
+
+  cargar(): void {
+    this.cargando = true;
+    this.solicitudService.listarTodas().pipe(
+      finalize(() => {
+        this.cargando = false;
+        this.cdr.markForCheck();
+      })
+    ).subscribe({
+      next: res => {
+        if (res.exitoso) {
+          this.solicitudes = res.datos;
+        }
+        this.cdr.markForCheck();
+      },
+      error: (err) => {
+        console.error('Error al cargar dashboard:', err);
+      }
     });
   }
 

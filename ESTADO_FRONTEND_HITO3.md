@@ -30,6 +30,35 @@ Se mejoró el componente de creación de solicitudes con las siguientes funciona
    - `.btn-retry` - Botón de reintento
    - `.field-hint` - Texto de ayuda bajo campos
 
+### 🔃 Botón de Actualizar Manual (Refresh Button)
+
+**Problema:** Después de crear/editar solicitudes o usuarios, los datos no se reflejaban inmediatamente en las demás pantallas. El usuario debía hacer doble click en los tabs de navegación para ver los cambios.
+
+**Solución implementada:**
+Se agregó un botón de "Actualizar" en el header de las 3 pantallas principales:
+
+1. **Dashboard (`dashboard.component.ts`)**
+   - Botón "Actualizar" junto al botón "Nueva Solicitud"
+   - Animación de spinner mientras carga
+   - Se deshabilita durante la carga
+
+2. **Lista de Solicitudes (`solicitud-list.component.ts`)**
+   - Botón "Actualizar" junto al botón "Nueva Solicitud"
+   - Llama a `cargarSolicitudes()` al hacer click
+   - Animación de spinner durante actualización
+
+3. **Lista de Usuarios (`usuario-list.component.ts`)**
+   - Botón "Actualizar" junto al botón "Nuevo Usuario"
+   - Llama a `cargarUsuarios()` al hacer click
+   - Animación de spinner durante actualización
+
+**Estilos del botón refresh (consistentes en los 3 componentes):**
+- `.btn-refresh` - Estilo base del botón
+- `.btn-refresh:hover:not(:disabled)` - Efecto hover
+- `.btn-refresh:disabled` - Estado deshabilitado
+- `.btn-refresh svg.spinning` - Animación de rotación
+- `.header-actions` - Contenedor flex para agrupar botones
+
 ---
 
 ## ✅ Funcionalidades Implementadas y Funcionales
