@@ -523,7 +523,6 @@ export class SolicitudCreateComponent implements OnInit {
       next: res => {
         if (res.exitoso) {
           this.usuarios = res.datos;
-          console.log('Usuarios cargados:', this.usuarios.length);
         } else {
           console.warn('Error al cargar usuarios:', res.mensaje);
         }

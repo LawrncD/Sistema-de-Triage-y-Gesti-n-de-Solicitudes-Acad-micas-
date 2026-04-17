@@ -65,7 +65,6 @@ export class AuthComponent {
           this.loading = false;
           // Verificar que el login fue exitoso antes de navegar
           if (res.exitoso) {
-            console.log('Login exitoso, token guardado');
             this.router.navigate(['/dashboard']);
           } else {
             this.errorMsg = res.mensaje || 'Error al iniciar sesión';

@@ -15,17 +15,13 @@ export class AuthService {
   constructor(private http: HttpClient, private router: Router) {}
 
   login(email: string, password: string): Observable<any> {
-    console.log('AuthService: Intentando login con email:', email);
     return this.http.post<any>(`${this.API_URL}/login`, { email, password }).pipe(
       tap((res: any) => {
-        console.log('AuthService: Respuesta de login:', res);
         if (res.exitoso && res.mensaje) {
           // El token JWT viene en el campo 'mensaje'
-          console.log('AuthService: Guardando token JWT');
           this.setToken(res.mensaje);
           // Guardar datos del usuario si vienen en 'datos'
           if (res.datos) {
-            console.log('AuthService: Guardando datos de usuario:', res.datos);
             this.setUserData(res.datos);
           }
         } else {
@@ -40,13 +36,11 @@ export class AuthService {
   }
 
   setToken(token: string): void {
-    console.log('AuthService: Guardando token en localStorage');
     localStorage.setItem(this.TOKEN_KEY, token);
   }
 
   getToken(): string | null {
     const token = localStorage.getItem(this.TOKEN_KEY);
-    console.log('AuthService: getToken() =', token ? 'Token existe' : 'No hay token');
     return token;
   }
 
@@ -60,7 +54,6 @@ export class AuthService {
   }
 
   logout(): void {
-    console.log('AuthService: Cerrando sesión');
     localStorage.removeItem(this.TOKEN_KEY);
     localStorage.removeItem(this.USER_KEY);
     this.router.navigate(['/login']);
@@ -69,7 +62,6 @@ export class AuthService {
   isAuthenticated(): boolean {
     const token = this.getToken();
     const isAuth = !!token;
-    console.log('AuthService: isAuthenticated() =', isAuth);
     return isAuth;
   }
 }
